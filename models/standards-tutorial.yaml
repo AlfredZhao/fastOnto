@@ -1,0 +1,76 @@
+# 教学子集，不是 GB/T 48000.3—2026 的完整标准本体。
+# 所有 demo 标识仅用于练习，不是标准发布机构的正式词汇。
+id: https://example.org/fastonto/tutorial/schema
+name: standards_tutorial
+title: 教学示例：标准与发布机构
+description: 练习实体类型、数据属性、对象属性、IRI 和约束声明；不连接或修改 SH。
+prefixes:
+  demo: https://example.org/fastonto/tutorial/vocab/
+  linkml: https://w3id.org/linkml/
+default_prefix: demo
+default_range: string
+imports:
+  - linkml:types
+classes:
+  Organization:
+    title: 发布机构
+    description: 本练习中负责发布标准的组织。
+    class_uri: demo:Organization
+    slots: [id, label]
+  Standard:
+    title: 标准
+    description: 本练习中具有编号、名称和发布信息的标准化文件。
+    class_uri: demo:Standard
+    slots: [id, label]
+    attributes:
+      standardNumber:
+        title: 标准编号
+        description: 标准的业务编号；本例未实现编号格式或全局唯一性验证。
+        slot_uri: demo:standardNumber
+        range: string
+        required: true
+      issuedDate:
+        title: 发布日期
+        slot_uri: demo:issuedDate
+        range: date
+        required: true
+      effectiveDate:
+        title: 实施日期
+        slot_uri: demo:effectiveDate
+        range: date
+        required: true
+      status:
+        title: 状态（教学简化）
+        slot_uri: demo:status
+        range: StandardStatus
+        required: true
+      issuedBy:
+        title: 发布机构
+        description: 连接标准实例与机构实例，而不是保存机构名称字符串。
+        slot_uri: demo:issuedBy
+        range: Organization
+        required: true
+        multivalued: false
+slots:
+  id:
+    title: 实例标识
+    description: 具体标准或机构的稳定标识，不是实体类型自身的 class_uri。
+    identifier: true
+    range: uriorcurie
+    required: true
+  label:
+    title: 名称
+    description: 实例的可读名称；不等于模型中类或属性的 title。
+    slot_uri: demo:label
+    range: string
+    required: true
+enums:
+  StandardStatus:
+    title: 标准状态（仅作枚举教学，不是完整规范词表）
+    permissible_values:
+      draft:
+        description: 草案
+      active:
+        description: 现行
+      withdrawn:
+        description: 废止

@@ -1,0 +1,15 @@
+id: https://example.org/ontology/new_model
+name: new_model
+title: 未命名模型
+description: 新建模型骨架；请修改模型名称、命名空间和实体定义。
+prefixes:
+  model: https://example.org/ontology/
+  linkml: https://w3id.org/linkml/
+default_prefix: model
+default_range: string
+imports:
+  - linkml:types
+classes:
+  Entity:
+    title: 待定义实体
+    class_uri: model:Entity

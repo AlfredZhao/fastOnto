@@ -1,0 +1,65 @@
+id: https://fastonto.example/schema/sales
+name: sports_sales
+title: 中文体育用品销售本体
+description: 业务源只读；客户与产品可虚拟映射，销售明细暂不声明永久 RDF 身份。
+prefixes:
+  fo: https://fastonto.example/vocab/
+  linkml: https://w3id.org/linkml/
+default_prefix: fo
+default_range: string
+imports:
+  - linkml:types
+classes:
+  Country:
+    title: 国家
+    class_uri: fo:Country
+    slots: [id, label]
+  Customer:
+    title: 客户
+    class_uri: fo:Customer
+    slots: [id, label]
+    attributes:
+      country:
+        title: 所属国家
+        range: Country
+        slot_uri: fo:country
+  Product:
+    title: 产品
+    class_uri: fo:Product
+    slots: [id, label]
+    attributes:
+      category:
+        title: 产品类别
+        range: string
+        slot_uri: fo:category
+      list_price:
+        title: 标价
+        range: decimal
+        slot_uri: fo:listPrice
+  Channel:
+    title: 销售渠道
+    slots: [id, label]
+  Promotion:
+    title: 促销活动
+    slots: [id, label]
+  SalesRecord:
+    title: 销售记录（源表只读）
+    description: 概念模型；未映射为有永久 URI 的实例，不能以维度组合去重源记录。
+    attributes:
+      customer: {title: 客户, range: Customer, required: true}
+      product: {title: 产品, range: Product, required: true}
+      channel: {title: 渠道, range: Channel, required: true}
+      promotion: {title: 促销, range: Promotion, required: true}
+      sale_date: {title: 销售日期, range: date, required: true}
+      quantity: {title: 数量, range: integer, required: true}
+      amount: {title: 金额（币种待业务确认）, range: decimal, required: true}
+slots:
+  id:
+    title: 稳定实体 URI
+    identifier: true
+    range: uriorcurie
+    required: true
+  label:
+    title: 中文名称
+    slot_uri: fo:label
+    required: true

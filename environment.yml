@@ -1,0 +1,8 @@
+name: fastonto
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+variables:
+  PYTHONNOUSERSITE: "1"
