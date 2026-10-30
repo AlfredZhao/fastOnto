@@ -66,7 +66,10 @@ class Settings(BaseSettings):
 
     @property
     def source_master_key_configured(self) -> bool:
-        value = self.source_master_key.get_secret_value()
+        return self._valid_master_key(self.source_master_key.get_secret_value())
+
+    @staticmethod
+    def _valid_master_key(value: str) -> bool:
         if not value: return False
         try:
             return len(base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))) == 32

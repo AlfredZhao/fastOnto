@@ -10,12 +10,16 @@ LinkML + FastAPI + React + Oracle 26ai 的本体工作台基础版本。
 
 外部文档建模见 `docs/document-import.md`：**导入文件 → 审核候选 → 生成独立草稿 → 保存版本 → 导出**。可上传 `models/document-dictionary-example.md` 体验。本地规则提取，不调用外部 AI、不保存原文件、不导入业务记录；普通正文不自动推断语义。
 
+围绕“构建、定义、映射、使用”的演示步骤见 `docs/ontology-demo.md`。
+
 ## 当前交付范围
 
 - 中文建模工作台：深浅主题、响应式布局、类/属性检查器、模型关系列表。
+- 校验后的可拖拽本体关系图；布局按模型校验摘要自动保存到当前浏览器并可恢复默认，属性可展开查看；拖拽仅整理阅读布局，LinkML YAML 仍是唯一可编辑模型主源。
 - LinkML YAML 编辑与受限建模子集校验；YAML / JSON Schema / OWL / SHACL 下载。
 - 新建模型、模板选择、YAML 导入、另存为独立模型；XLSX / DOCX / Markdown / TXT 导入向导，审核候选类、属性、对象关系与来源位置，生成 LinkML 草稿。
 - 模型源码保存到 FASTONTO，追加历史版本；通过 expected_revision 防止覆盖并发修改。
+- 业务域内可维护规则、指标、操作的声明式草稿；字段映射可基于同名属性/字段生成待人工审核的自动建议，并可下载应用构建蓝图作为方案交接基线。
 - 8 张 SH 核心表的白名单分页预览，保留重复销售记录；金额按十进制字符串输出。
 - FASTONTO schema-private RDF 网络 `FO_NET`、R2RML 虚拟图 `FO_SH_V1`。
 - 两个普通 SQL View 引用 SH.CUSTOMERS / SH.PRODUCTS，无物化实例副本。
@@ -62,7 +66,7 @@ FASTONTO_DB_DSN=主机:1521/服务名
 
 所有业务接口（包括模板、校验和导出）现在均需登录。数据库未配置或不可用时登录不能完成，不会返回假业务数据。仅 `/api/health` 提供匿名的最小进程存活检查。
 
-## 登录与临时 HTTP 访问
+## 登录与 HTTPS 访问
 
 本机已初始化应用账号 `admin`。在服务器终端查看随机临时密码：
 
@@ -80,20 +84,17 @@ conda run -n fastonto python -m app.bootstrap_admin
 
 已有 admin 不会被重置。此命令不提供密码找回/覆盖功能。
 
-临时外部 HTTP 测试时，在本机 `.env` 中填写部署地址（不要把真实公网 IP 提交到仓库）：
+在本机 `.env` 中填写 HTTPS 部署地址（不要把真实公网域名提交到仓库）：
 
 ```dotenv
-FASTONTO_PUBLIC_ORIGIN=http://your-server.example:8025
-FASTONTO_ALLOW_INSECURE_HTTP=true
+FASTONTO_PUBLIC_ORIGIN=https://your-server.example:8025
 ```
 
-默认启动直接使用 Vite，监听 `0.0.0.0:8025`，**不依赖、不调用 Nginx**。后端仍只监听 `127.0.0.1:8026`。前端代理会覆盖客户端伪造的转发 IP 头，保留 Origin 供后端校验；文件访问限制在 frontend 内，拒绝 .env、.runtime 和密钥文件。
-
-**登录不等于传输加密。HTTP 密码和 Cookie 可被网络窃听；请勿复用密码，建议防火墙仅放行你的来源 IP。Vite 开发服务器仅用于本次临时测试，不代表完成公网生产部署。** 后续正式环境再评估 HTTPS 与生产静态资源服务。
+HTTPS Gateway 模式下，后端仍只监听 `127.0.0.1:8026`；网关负责 TLS 和前端静态资源。前端代理会覆盖客户端伪造的转发 IP 头，保留 Origin 供后端校验；文件访问限制在 frontend 内，拒绝 .env、.runtime 和密钥文件。
 
 ## 数据库迁移与验收
 
-本环境需依次对 `FASTONTO` 应用迁移 001/002/003/004/005，详见 `docs/verification.md`。
+本环境需依次对 `FASTONTO` 应用迁移 001 至 010，详见 `docs/verification.md`。
 
 其他环境或重新验收时，从项目根目录手工执行：
 
@@ -104,16 +105,18 @@ sql -S /nolog @db/verify.sql
 
 - 脚本只允许 `FASTONTO` / `ORCLPDB1`；其他部署必须显式审查并调整容器保护条件。
 - Oracle DDL 自动提交；中途失败不意味着整体回滚。修复后可重跑同一迁移，不自动删除网络或数据。
-- 版本号 001/002/003/004/005 已使用；后续变更使用新迁移，不偷偷覆写已有映射或用户密码。
+- 版本号 001 至 010 已使用；后续变更使用新迁移，不偷偷覆写已有映射或用户密码。
 - 迁移 004/005 只建立 FASTONTO 内的业务域、本体和治理草稿元数据；工作空间仅保留为内部扩展容器，不在当前 UI 或 API 中暴露。不会修改 SH，也不会使治理草稿自动变为运行中的 RDF 映射。
 - 迁移 006 支持登记外部 Oracle 只读数据源。其 DSN、用户名和密码以 AES-256-GCM 密文保存在 FASTONTO；主密钥仅在本机 `FASTONTO_SOURCE_MASTER_KEY`，不写入数据库、不返回浏览器。HTTPS 下可浏览指定 Schema 的表/视图、字段和有界样例数据，并下载 LinkML 建模候选；不开放任意 SQL。
+- 迁移 009 建立受控分析场景元数据，迁移 010 建立维度展示规则元数据；二者只保存 FASTONTO 元数据，不修改 SH。
+- 迁移 008 支持配置多个兼容 OpenAI Chat Completions 的 LLM。服务基础地址可为 HTTP 或 HTTPS；API Key 与外部 Oracle 源凭据共用本机 `FASTONTO_SOURCE_MASTER_KEY`，以 AES-256-GCM 密文保存在 FASTONTO；密钥和 API Key 均不返回浏览器。可在“LLM 配置”新增模型、测试连通性并设置默认模型；导入非 YAML 文档时会将文档预处理结果发送给所选模型生成候选，仍须人工审核。
 - RDF 网络会创建 Oracle 内部表、索引等对象；这些不是 SH 业务表副本。R2RML 映射本身也以少量元数据三元组保存。
 - `https://fastonto.example/` 是本地验证用 URI 命名空间，不进行联网解引用。正式发布前需明确 URI 管理策略。
 
 ## 后台启动、停止与重启
 
 ```bash
-# 项目根目录；启动后不占用终端，无需再加 nohup 或 &
+# 项目根目录；默认启动 HTTPS gateway，启动后不占用终端，无需再加 nohup 或 &
 bash scripts/start-all.sh
 bash scripts/status.sh
 bash scripts/stop-all.sh
@@ -124,7 +127,7 @@ bash scripts/start-backend.sh
 bash scripts/stop-backend.sh
 bash scripts/restart-frontend.sh
 
-# 仅本机前端：统一入口加 --local
+# 仅本机 Vite 前端：统一入口加 --local
 bash scripts/start-frontend.sh --local
 # 重启也需明确 --local；不带该参数的启动/重启默认是已批准的外部 HTTP 模式
 bash scripts/restart-frontend.sh --local
@@ -136,7 +139,7 @@ bash scripts/restart-frontend.sh --local
 
 日志在 `logs/backend.log`、`logs/frontend.log`；PID/启动时刻/进程组状态在 `.runtime/services/`，均不提交 Git。启动检查端口和 HTTP 就绪，重复启动不创建第二份进程。停止默认等候 30 秒，超时返回失败并保留状态；确认可强制中断后用 `stop-*.sh --force`。重启严格先调用 stop，成功后才 start；整体停止前端→后端，整体启动后端→前端。
 
-运行要求：Linux（支持 pidfd）、Conda fastonto、Node 和已安装的前端依赖；同一 Unix 用户操作。脚本不安装依赖、不迁移数据库、不变更防火墙或 Nginx。**这次补齐的是生命周期管理，仍保留 Vite 临时 HTTP 测试架构，不等于完成生产部署或自动故障守护。** 详细参数、失败处理和运维边界见 `docs/service-lifecycle.md`。
+运行要求：Linux（支持 pidfd）、Conda fastonto、Node 和已安装的前端依赖；同一 Unix 用户操作。脚本不安装依赖、不迁移数据库、不变更防火墙或系统 Nginx；HTTPS Gateway 模式的详细参数、失败处理和运维边界见 `docs/service-lifecycle.md`。
 
 ## Git 提交与版本标签
 

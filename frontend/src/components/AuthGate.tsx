@@ -45,7 +45,6 @@ export default function AuthGate() {
     <div className="auth-brand"><Layers3 size={30}/><strong>fastOnto</strong><button className="icon-button" aria-label={theme === 'dark' ? '切换浅色主题' : '切换深色主题'} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button></div>
     <div className="eyebrow">ONTOLOGY WORKSPACE</div><h1>{session ? '设置你的登录密码' : '登录本体工作台'}</h1>
     <p>模型与业务数据仅在登录后可访问。</p>
-    {location.protocol === 'http:' && <div className="notice warning">当前为 HTTP 测试访问，密码与会话传输未加密。请勿复用其他系统密码；正式使用需启用 HTTPS。</div>}
     {session ? <><PasswordForm forced onComplete={accept}/><button className="auth-logout" onClick={() => void logout().catch(() => {})}>退出登录</button></> : <form className="auth-form" onSubmit={e => void login(e)}>
       <label htmlFor="login-username">用户名</label><input id="login-username" autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} required minLength={3} maxLength={64} disabled={busy}/>
       <label htmlFor="login-password">密码</label><input id="login-password" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required maxLength={1024} disabled={busy}/>

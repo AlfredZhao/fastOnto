@@ -9,6 +9,7 @@ from io import BytesIO
 import posixpath
 from pathlib import PurePosixPath
 import re
+from uuid import UUID
 from zipfile import BadZipFile, ZipFile
 from zlib import error as ZlibError
 from xml.etree import ElementTree as ET
@@ -33,6 +34,7 @@ class StrictInput(BaseModel):
 class DocumentInput(StrictInput):
     filename: str = Field(min_length=1, max_length=180)
     content_base64: str = Field(min_length=1, max_length=2796204)
+    llm_id: UUID | None = None
 
 
 class CandidateField(StrictInput):

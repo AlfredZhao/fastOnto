@@ -4,6 +4,7 @@ import { download } from '../api';
 import type { Workspace } from '../useWorkspace';
 import Dialog from '../components/Dialog';
 import ModelCreator from '../components/ModelCreator';
+import OntologyCanvas from '../components/OntologyCanvas';
 
 export default function ModelWorkspace({work, active = true}: {work: Workspace; active?: boolean}) {
   const currentWork = useRef(work);
@@ -63,6 +64,7 @@ export default function ModelWorkspace({work, active = true}: {work: Workspace; 
         </> : <div className="empty"><GitBranch size={30}/><h3>让结构清晰可见</h3><p>校验后查看类、属性和关系。校验失败不会清空你的源码。</p></div>}
       </aside>
     </div>
+    {work.report && <OntologyCanvas report={work.report}/>}
     <div className="notice subtle">{work.report?.warnings.join(' ') ?? '首版支持类、属性、枚举与单继承。仅允许内置 linkml:types；不执行远程导入或生成代码。'}</div>
     <Dialog open={!!pending && active} title={pending?.kind === 'draft' ? '创建独立草稿？' : '打开另一个模型？'} onCancel={() => setPending(null)} confirmDisabled={!!work.busy || work.loading} onConfirm={() => {
       if (!pending) return;

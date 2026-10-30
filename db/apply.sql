@@ -8,4 +8,7 @@ connect -name test_fastonto
 @@migrations/005_default_domain_scope.sql
 @@migrations/006_business_source_credentials.sql
 @@migrations/007_multi_source_semantics.sql
+@@migrations/008_llm_models.sql
+@@migrations/009_controlled_analytics_mvp.sql
+@@migrations/010_analytic_presentation_rules.sql
 exit

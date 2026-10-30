@@ -52,7 +52,7 @@ classes:
       promotion: {title: 促销, range: Promotion, required: true}
       sale_date: {title: 销售日期, range: date, required: true}
       quantity: {title: 数量, range: integer, required: true}
-      amount: {title: 金额（币种待业务确认）, range: decimal, required: true}
+      amount: {title: 金额（人民币）, range: decimal, required: true}
 slots:
   id:
     title: 稳定实体 URI

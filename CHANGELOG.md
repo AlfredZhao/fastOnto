@@ -1,3 +1,20 @@
+# Unreleased
+
+- Added a LinkML-based four-question platform test manual covering ontology construction, semantic definition, mapping, and controlled use.
+
+- Added native SVG KPI, bar, line, and donut visualizations for controlled analytics while retaining the source result table and trace.
+
+- Added multi-metric natural-language answers for jointly requested sales amount and quantity, sharing one normalized time range.
+
+- Added normalized Asia/Shanghai relative-period handling for controlled analytics; unsupported or unrecognized metric questions now refuse instead of defaulting to sales amount.
+- Corrected navigation section numbering and added verifier period controls.
+
+- Added bounded LLM intent routing and result narration, plus visibly labelled restricted exploration mode; neither accepts LLM SQL.
+- Added configurable customer name presentation order/separator through migration 010.
+- Defined the SH MVP sales amount presentation unit as RMB.
+- Added controlled SH analytics MVP: five high-value scenarios, fixed sales amount/quantity templates, conservative question routing, lineage output, and refusal of undefined metrics.
+- Added migration 009 for future controlled analytics scenario metadata and the zero-to-MVP SH operation guide.
+
 # Changelog
 
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的记录方式，并使用[语义化版本](https://semver.org/lang/zh-CN/)。
@@ -9,6 +26,24 @@
 ### Security
 
 - 移除文档、前端 Vite 配置和回归夹具中的部署公网 IP；部署地址仅在本机忽略的 `.env` 中配置。
+
+### Fixed
+
+- `scripts/commit-to-github.sh` 现在会在 `git add -A` 前检查未跟踪新文件的空白和冲突标记，并显示具体位置，避免检查失败后才留下已暂存但未提交的变更。
+- 业务域治理目录对缺失的新增集合字段采用空列表降级，避免前端更新早于后端时因目录响应不完整而使整个页面无法显示。
+- 修正 LLM 配置保存使用 Oracle 保留字 `default` 作为绑定名导致的 ORA-01745。
+- LLM 未返回候选或候选超过平台限额时，文档导入保留本地有界预处理结果并提示人工补充，不再使导入流程整体失败。
+
+### Added
+
+- 模型工作台在校验后提供可拖拽整理的本体关系图，直观展示类、标量属性和对象关系；布局按模型校验摘要自动保存在当前浏览器，可恢复默认，不改写 LinkML 主源；属性较多的实体可在图中展开完整字段列表。
+- 业务域治理页可创建规则、指标和操作的声明式语义资产草稿；字段映射可按模型属性和源字段的同名规则生成待人工确认的建议，并可导出包含模型版本与治理资产计数的应用构建蓝图。
+- 新增 LLM 配置页：可保存多个兼容 OpenAI Chat Completions 的模型、测试连通性、设置默认模型；API Key 使用 `FASTONTO_SOURCE_MASTER_KEY` 加密。文档导入可选择默认或指定 LLM 生成 LinkML 候选，仍须人工审核。
+- 字段映射编辑器新增“校验模型与数据表”：基于当前 LinkML 类、数据源字段及可用主键生成匹配、缺失字段、未纳入字段、主体标识和对象关系待审核报告。
+
+### Changed
+
+- `start-all.sh`、`stop-all.sh` 和 `restart-all.sh` 默认编排 HTTPS gateway 与后端；显式传 `--local` 时才编排本机 Vite 前端与后端，避免 gateway 和 Vite 争用 8025。
 
 ## [0.1.0] - 2026-10-28
 

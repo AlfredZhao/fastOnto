@@ -5,12 +5,12 @@ import path from 'node:path';
 const fixture = 'id: https://fastonto.example/test\nname: sample\ntitle: 测试模型\n';
 const report = {
   valid: true, name: 'sample', title: '测试模型', sha256: 'a'.repeat(64), enum_count: 0,
-  classes: [{name: 'Product', title: '产品', description: '用于测试的模型', uri: `https://example.test/${'long-uri-'.repeat(60)}`, slots: [{name: 'id', title: '标识', range: 'string', required: true, multivalued: false, identifier: true}]}],
+  classes: [{name: 'Product', title: '产品', description: '用于测试的模型', uri: `https://example.test/${'long-uri-'.repeat(60)}`, slots: [{name: 'id', title: '标识', range: 'string', required: true, multivalued: false, identifier: true}, {name: 'name', title: '名称', range: 'string', required: true, multivalued: false, identifier: false}, {name: 'category', title: '分类', range: 'string', required: false, multivalued: false, identifier: false}, {name: 'price', title: '价格', range: 'decimal', required: false, multivalued: false, identifier: false}, {name: 'note', title: '备注', range: 'string', required: false, multivalued: false, identifier: false}]}],
   relationships: [], warnings: ['结构校验不代表实例校验。'],
 };
 const sources = ['PRODUCTS', 'CUSTOMERS'].map(name => ({name, title: name === 'PRODUCTS' ? '产品' : '客户', owner: 'SH', columns: ['ID', 'NAME'], identity: '源主键'}));
 
-async function fixtureApp(page: Page, options: { delayValidation?: number; saveFailure?: boolean; sourceFailure?: boolean; sourceEmpty?: boolean; malformedTheme?: boolean; dbConfigured?: boolean; importDelay?: number; importFailure?: boolean; importEmpty?: boolean } = {}) {
+async function fixtureApp(page: Page, options: { delayValidation?: number; saveFailure?: boolean; sourceFailure?: boolean; sourceEmpty?: boolean; malformedTheme?: boolean; dbConfigured?: boolean; importDelay?: number; importFailure?: boolean; importEmpty?: boolean; legacyGovernanceCatalog?: boolean } = {}) {
   if (options.malformedTheme) await page.addInitScript(() => localStorage.setItem('fastonto.theme.v1', '{broken-json'));
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -29,9 +29,12 @@ async function fixtureApp(page: Page, options: { delayValidation?: number; saveF
       } else if (url.pathname === '/api/models/draft') body = {source: fixture + '# generated draft\n'};
       else if (url.pathname.startsWith('/api/models/export/')) body = {content: url.pathname.endsWith('jsonschema') ? '{}' : '@prefix demo: <https://example.org/> .'};
       else if (url.pathname === '/api/models' && route.request().method() === 'GET') body = {items: [{id: '00000000-0000-0000-0000-000000000001', title: '已保存模型', revision: 1}]};
+      else if (url.pathname === '/api/llm-models') body = {items: [{id: '00000000-0000-0000-0000-000000000010', title: '测试 LLM', model_name: 'test-model', enabled: true, is_default: true}]};
       else if (url.pathname === '/api/models' && route.request().method() === 'POST') {
         status = options.saveFailure ? 409 : 200;
         body = options.saveFailure ? {detail: '模型版本已变化，请保留草稿。'} : {id: '00000000-0000-0000-0000-000000000001', title: '测试模型', revision: 1};
+      } else if (url.pathname === '/api/governance/catalog') {
+        body = options.legacyGovernanceCatalog ? {domains: []} : {domains: [], ontologies: [], mappings: [], entity_links: [], assets: [], notice: ''};
       } else if (url.pathname === '/api/models/validate') {
         if (options.delayValidation) await new Promise(r => setTimeout(r, options.delayValidation));
         const submitted = route.request().postDataJSON() as {source: string};
@@ -84,6 +87,17 @@ test('late validation does not replace edited draft and is marked stale', async 
   await expect(page.getByLabel('LinkML 模型源码')).toHaveValue(changed);
 });
 
+test('validated model exposes the visual ontology canvas', async ({page}) => {
+  await fixtureApp(page);
+  await page.getByRole('button', {name: '校验模型', exact: true}).click();
+  await expect(page.getByLabel('本体关系图')).toBeVisible();
+  await expect(page.getByRole('button', {name: '拖拽 产品'})).toBeVisible();
+  await expect(page.getByText('当前模型没有对象关系；可先在 LinkML 中定义类之间的属性关系。')).toBeVisible();
+  await page.getByRole('button', {name: '展开其余 1 个属性'}).click();
+  await expect(page.locator('.ontology-node').getByText('备注', {exact: true})).toBeVisible();
+  await expect(page.getByRole('button', {name: '恢复默认'})).toBeVisible();
+});
+
 test('save conflict keeps draft', async ({page}) => {
   await fixtureApp(page, {saveFailure: true});
   await page.getByRole('button', {name: '保存版本'}).click();
@@ -97,6 +111,14 @@ test('route navigation preserves unsaved draft', async ({page}) => {
   await page.getByRole('link', {name: '业务数据源'}).click();
   await page.getByRole('link', {name: '模型工作台'}).click();
   await expect(page.getByLabel('LinkML 模型源码')).toHaveValue(fixture + '# unsaved\n');
+});
+
+test('governance remains available when a backend catalog omits newer collections', async ({page}) => {
+  await fixtureApp(page, {legacyGovernanceCatalog: true});
+  await page.getByRole('link', {name: '业务域治理'}).click();
+  await expect(page.getByRole('heading', {name: '业务域与本体'})).toBeVisible();
+  await expect(page.getByText('尚无业务域。请先创建例如“销售域”。')).toBeVisible();
+  await expect(page.getByText('无法显示')).not.toBeVisible();
 });
 
 test('model switch confirmation is cancellable in light mobile theme', async ({page}) => {

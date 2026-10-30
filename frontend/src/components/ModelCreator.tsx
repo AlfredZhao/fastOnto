@@ -4,6 +4,7 @@ import { api } from '../api';
 type CandidateField = {name: string; title: string; range: string; required: boolean; multivalued: boolean; description: string; evidence: string};
 type CandidateClass = {name: string; title: string; evidence: string; fields: CandidateField[]};
 type Inspection = {kind: 'yaml'; source: string} | {kind: 'document'; filename: string; classes: CandidateClass[]; warnings: string[]};
+type LLMModel = {id: string; title: string; model_name: string; enabled: boolean; is_default: boolean};
 const types = ['string', 'integer', 'decimal', 'float', 'double', 'boolean', 'date', 'datetime', 'uriorcurie'];
 
 export default function ModelCreator({mode, disabled, onReady, onCancel}: {mode: 'template' | 'import'; disabled: boolean; onReady: (source: string) => void; onCancel: () => void}) {
@@ -13,8 +14,13 @@ export default function ModelCreator({mode, disabled, onReady, onCancel}: {mode:
   const [name, setName] = useState('imported_model'), [title, setTitle] = useState('文档建模草稿');
   const [namespace, setNamespace] = useState('https://example.org/ontology/');
   const [confirmed, setConfirmed] = useState(false);
+  const [llms, setLlms] = useState<LLMModel[]>([]), [llmChoice, setLlmChoice] = useState(''), [llmLoaded, setLlmLoaded] = useState(false);
   const active = useRef<AbortController | null>(null), sequence = useRef(0);
   useEffect(() => () => {++sequence.current; active.current?.abort();}, []);
+  useEffect(() => {
+    if (mode !== 'import') return;
+    void api<{items: LLMModel[]}>('/llm-models').then(result => {setLlms(result.items.filter(item => item.enabled)); setLlmChoice(result.items.find(item => item.enabled && item.is_default)?.id ?? '');}).catch(e => setError(e instanceof Error ? e.message : '无法读取 LLM 配置。')).finally(() => setLlmLoaded(true));
+  }, [mode]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => { if (inspection) {event.preventDefault(); event.returnValue = '';} };
     window.addEventListener('beforeunload', warn);
@@ -39,10 +45,11 @@ export default function ModelCreator({mode, disabled, onReady, onCancel}: {mode:
     void run(async signal => {
       if (file.size === 0 || file.size > 2 * 1024 * 1024) throw new Error('文件为空或超过 2 MiB。');
       if (!/\.(xlsx|docx|md|txt|ya?ml)$/i.test(file.name)) throw new Error('仅支持 XLSX、DOCX、Markdown、TXT 和 YAML；旧版 XLS/DOC 请先转换。');
+      if (!/\.ya?ml$/i.test(file.name) && (!llmLoaded || !llmChoice)) throw new Error('请先在 LLM 配置页新增并设定一个默认模型，或在此处选择可用模型。');
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = '';
       for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
-      return api<Inspection>('/models/import', {method: 'POST', signal, body: JSON.stringify({filename: file.name, content_base64: btoa(binary)})});
+      return api<Inspection>('/models/import', {method: 'POST', signal, body: JSON.stringify({filename: file.name, content_base64: btoa(binary), llm_id: /\.ya?ml$/i.test(file.name) ? undefined : llmChoice})});
     }, result => {
       if (result.kind !== 'yaml' && result.kind !== 'document') throw new Error('无法识别文件解析结果。');
       setInspection(result);
@@ -58,7 +65,7 @@ export default function ModelCreator({mode, disabled, onReady, onCancel}: {mode:
   return <section className="panel model-creator" aria-label="创建模型向导">
     <div className="panel-title"><h2>{mode === 'template' ? '新建独立模型' : '从文件创建模型'}</h2><button className="icon-button" onClick={onCancel}>关闭向导</button></div>
     <div className="creator-content">
-      <p>只创建模型草稿，不保存上传原文件、不导入业务记录、不修改 SH。文件在本平台内存中处理，不发送外部 AI。当前 HTTP 测试传输未加密，请勿上传敏感文档。</p>
+      <p>只创建模型草稿，不保存上传原文件、不导入业务记录、不修改 SH。文档会在本平台内存中预处理，并发送给你选择的 LLM 生成 LinkML 候选；请在生成前人工审核。</p>
       {error && <div role="alert" className="notice error">{error}</div>}
       {busy && <div role="status" className="notice">正在处理，请稍候… 原模型不会被自动覆盖。</div>}
       <fieldset disabled={busy || disabled}>
@@ -67,6 +74,8 @@ export default function ModelCreator({mode, disabled, onReady, onCancel}: {mode:
           <button onClick={() => loadTemplate('sales')}>销售示例</button>
           <button onClick={() => loadTemplate('standards')}>标准与发布机构</button>
         </div> : <>
+          <label className="creator-label">文档分析 LLM<select value={llmChoice} disabled={!llmLoaded || !llms.length} onChange={event => setLlmChoice(event.target.value)}><option value="">请选择 LLM…</option>{llms.map(item => <option value={item.id} key={item.id}>{item.title} · {item.model_name}{item.is_default ? '（默认）' : ''}</option>)}</select></label>
+          {!llmLoaded ? <p className="caption">正在读取 LLM 配置…</p> : !llms.length ? <div className="notice warning">尚无可用 LLM。请先进入“LLM 配置”新增 HTTPS 模型并设为默认模型。</div> : <p className="caption">默认选择平台默认 LLM。上传 XLSX、DOCX、Markdown 或 TXT 后，文档内容/本地提取结构会发送至所选 LLM 用于生成候选。</p>}
           <label className="creator-label">上传模型或业务文档<input type="file" accept=".xlsx,.docx,.md,.txt,.yaml,.yml" onChange={event => {upload(event.target.files?.[0]); event.target.value = '';}}/></label>
           <p className="caption">最大 2 MiB。支持 XLSX / DOCX / UTF-8 Markdown、TXT、LinkML YAML；YAML 模型仍限 64 KiB。旧版 XLS / DOC 请转换。重新选择文件会清除本向导中的候选修改。</p>
           {inspection?.kind === 'yaml' && <>
@@ -76,7 +85,7 @@ export default function ModelCreator({mode, disabled, onReady, onCancel}: {mode:
           </>}
           {inspection?.kind === 'document' && <>
             <h3>审核候选模型</h3>
-            <p>文件：{inspection.filename} · {classes.length} 个候选类。表格默认按表头提取；数据字典须包含“实体、字段”列。正文不进行自动语义理解。</p>
+            <p>文件：{inspection.filename} · {classes.length} 个候选类。LLM 输出仅作为候选；请审核类、属性、关系、标识和约束。</p>
             <ul className="import-warnings">{inspection.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul>
             <div className="creator-grid">
               <label className="creator-label">模型技术标识<input value={name} maxLength={80} onChange={e => {setName(e.target.value); setConfirmed(false);}}/></label>

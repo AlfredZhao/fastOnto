@@ -1,5 +1,36 @@
 # 防回归规则
 
+## 2026-10-29：业务域治理目录的前后端版本兼容
+
+- 治理页读取 `/api/governance/catalog` 时，`domains`、`ontologies`、`mappings`、`entity_links`、`assets` 必须逐项按数组校验；缺失的后续新增集合按空列表显示，不能对 `undefined` 调用 `filter` 或 `map` 并使页面错误边界接管。
+- 守护：`frontend/tests/workspace.spec.ts` 的 `governance remains available when a backend catalog omits newer collections`。该用例模拟旧目录响应仅含 `domains`，确认页面仍展示空业务域状态。
+
+## 2026-10-29：本体演示能力仍须保持声明式边界
+
+- 本体关系图仅从最近一次 LinkML 校验快照渲染；拖拽只改变当前页面的阅读布局，按模型校验摘要自动保存到本浏览器，并可恢复默认。它不能成为第二份模型主源或静默修改 YAML，也不得保存业务数据或模型正文。
+- 字段自动匹配只允许按当前模型标量属性和已选择源对象的字段名/标题给出建议，保存前必须由用户确认；不得借此执行 SQL、类型转换、join 或跨源匹配。
+- 规则、指标、操作编辑器只保存数据型声明，继续拒绝 SQL、SPARQL、脚本、命令和表达式字段；它们不自动执行或变更业务记录。
+- 应用构建蓝图只导出当前关联模型版本及治理资产数量，不能被视为映射发布、应用部署或任意查询授权。
+- 守护：`frontend/tests/workspace.spec.ts` 的 `validated model exposes the visual ontology canvas`，以及现有治理资产服务端输入验证。
+
+## 2026-10-29：LLM 文档分析必须保留凭据与建模边界
+
+- `FO_LLM_MODELS` 仅保存 HTTP(S) OpenAI-compatible 基础地址、模型标识和 API Key 密文；API Key、密文和共用的本机 `FASTONTO_SOURCE_MASTER_KEY` 不得返回浏览器或日志。迁移 008 必须在 FASTONTO/ORCLPDB1 手工执行。
+- 文档仍先在内存做有界格式预处理，不保存原文件、不导入业务记录、不修改 SH。非 YAML 文档只有在前端明确选择已配置 LLM 后才发送给该服务；LLM 输出必须通过候选类/属性限额与结构校验，并由用户审核。
+- LLM 返回空候选或超出候选上限时，导入应降级保留本地预处理候选并标记原因，不得因 LLM 不稳定而丢弃上传后的人工审核流程。
+- LLM 只允许无嵌入凭据、无查询参数的 HTTP(S) 基础地址；测试和分析均不接受任意用户 URL 或提示词执行入口。不得把 LLM 输出当成已发布本体、映射或可执行规则。
+
+## 2026-10-29：HTTPS gateway 是默认整体生命周期模式
+
+- `start-all.sh` 与 `restart-all.sh` 默认顺序必须是后端 → gateway；`stop-all.sh` 默认顺序必须是 gateway → 后端。不得在 HTTPS gateway 已占用 8025 时尝试启动 Vite。
+- `--local` 是明确选择本机 Vite 模式的开关；此模式才编排 frontend，而不是 gateway。默认模式和 `--local` 模式都只管理已登记进程，不能按端口接管未知 Vite/Nginx 进程。
+- 守护：`backend/tests/test_service_scripts.py` 的整体启动、停止、重启顺序与 `--local` 参数路由用例。
+
+## 2026-10-29：模型与数据表对齐只生成审核建议
+
+- 对齐报告只能读取当前关联 LinkML 校验结构、SH 白名单字段或外部源已验证的表/视图元数据；不得读取、复制或推断完整业务行。
+- 主键、同名字段和对象关系仅用于生成待审核建议。对象关系不自动变为 join、联邦查询或运行时 RDF 映射。
+
 - 不得在受版本控制的源码、文档、测试夹具或代理允许列表中写入部署公网 IP；外部访问地址只可存在于忽略的本机 `.env` 或运行环境变量。Vite 不得以 `allowedHosts=true` 规避主机校验。
 - HTTPS gateway 与 Vite 前端互斥使用 8025。gateway 启动前必须通过 origin/证书/私钥/构建产物验证；使用项目私有错误日志与 `-e`，不得尝试写 `/var/log/nginx`，也不得接管或终止未知监听进程。
 - Nginx 的 `daemon off` 只能由 gateway 受管启动命令提供，生成的配置不得重复声明；否则 Nginx 会在解析配置时立即退出。
@@ -19,6 +50,7 @@
 
 - scripts/commit-to-github.sh 仅操作脚本所在根仓库，支持 unborn 分支；不自动 init/改作者/加远端/换分支。异常 GIT_DIR/GIT_INDEX_FILE 等覆盖环境、detached HEAD、进行中的 Git 操作须拒绝。
 - dry-run 离线且不构建、不建仓库锁、不修改索引/提交/标签；无远端可预演。普通模式全项目暂存应明确告知，构建失败不能由本脚本暂存。
+- 未跟踪的新文件须在 `git add -A` 前以 `git diff --no-index --check` 检查空白与冲突标记；失败时必须显示位置且不改写索引。构建后再次检查，以覆盖构建期间产生的新文件；最终暂存检查仍保留为并发修改的兜底。
 - .env、日志、运行状态、私钥、缓存等强行暂存也须拒绝；只显示路径，不输出敏感内容/带凭据的远端 URL。这是路径守护，不是历史或任意源码密钥扫描。
 - --no-tag 与参数顺序无关；版本标签为附注标签。已有标签仅允许干净且同 HEAD 时复用，防止失败重试生成重复提交或移动标签。
 - 显式选定远端/当前分支；禁用隐式 followTags，分支和指定标签 atomic 推送；失败保留本地状态，不自动 reset/强推/删除标签。CHANGELOG 不自动重排。
@@ -113,3 +145,22 @@
 - 映射仍只能是单个表/视图到单个本体类的字段直连。外部表/视图字段只通过受控 `ALL_*` 数据字典查询验证；不接受源端 SQL、join、筛选、转换或对象关系。
 - `FO_ENTITY_LINK_ASSETS` 只记录两个映射之间的 `IDENTITY` 对齐声明，且键字段必须已经出现在各自映射定义中。它不读取业务行、不自动匹配用户/客户、不创建同一实体实例、更不执行跨源查询。
 - 迁移 007 必须由 FASTONTO/ORCLPDB1 手工执行；Oracle DDL 自动提交，失败时检查列和表是否部分建立后再处理。不得宣称已回滚。
+
+
+## Controlled SH analytics MVP
+
+- Verify `/api/analytics/catalog` exposes only the five fixed scenarios and reviewed metrics.
+- Verify unknown metric/dimension, ambiguous question, and profit/cost question return 422 and do not execute a source query.
+- Verify query binds year and limit separately, reads only SH allowlisted tables, and reports lineage.
+- Verify the analytics UI handles loading, empty result, error/refusal, long question input, stale request/session behavior inherited from `api()`, desktop/mobile, and dark/light themes.
+
+- Verify LLM analytics routing accepts only its bounded JSON plan; malformed, low-confidence, or unavailable LLM falls back to deterministic routing without SQL generation.
+- Verify exploration mode is visibly labelled non-governed and only uses fixed aggregate templates.
+- Verify customer name presentation settings use bound separators and accept only supported surname/given-name order.
+
+- Verify `本周/本月/本季度/本年/上期` normalize to explicit Asia/Shanghai half-open date ranges and never silently widen to all SH rows.
+- Verify a question lacking a published metric is refused; it must not default to sales amount.
+
+- Verify “本月销售额和销量是多少？” returns both metrics with the same normalized half-open period; it must never silently run an all-time query.
+
+- Verify monthly trends are chronological line charts; rankings use bars, optional donut charts show at most eight categories, and tabular results remain visible.

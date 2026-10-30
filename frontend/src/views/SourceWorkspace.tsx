@@ -27,7 +27,7 @@ export default function SourceWorkspace() {
     return () => controller.abort();
   }, [name, offset, tick]);
   const current = sources.find(s => s.name === name);
-  return <section className="page"><div className="page-heading"><div><div className="eyebrow">BUSINESS SOURCES / 02</div><h1>数据留在业务系统</h1><p>通过 FASTONTO 的 READ 授权直连 SH。白名单查询，无导入、无副本、无回写。</p></div><span className="tag">LIVE · 只读</span></div>
+  return <section className="page"><div className="page-heading"><div><div className="eyebrow">BUSINESS SOURCES / 03</div><h1>数据留在业务系统</h1><p>通过 FASTONTO 的 READ 授权直连 SH。白名单查询，无导入、无副本、无回写。</p></div><span className="tag">LIVE · 只读</span></div>
     <div className="source-layout"><aside className="panel resource-tree"><div className="panel-title"><Database size={16}/><h2>SH 数据源</h2></div><p className="caption">配置清单；连接状态以实际查询为准。</p>{sources.map(s => <button key={s.name} className={`tree-item ${name === s.name ? 'selected' : ''}`} onClick={() => {setName(s.name); setOffset(0);}}><Database size={15}/><span>{s.title}<small>{s.owner}.{s.name}</small></span></button>)}</aside>
       <section className="panel source-panel"><div className="panel-title"><h2>{current?.title ?? name}</h2><code>SH.{name}</code><button className="icon-button" aria-label="刷新源数据" onClick={() => setTick(t => t + 1)} disabled={loading}><RefreshCw size={16}/></button></div>
         {error && <div className="notice error" role="alert">{error}<button onClick={() => setTick(t => t + 1)}>重试</button></div>}

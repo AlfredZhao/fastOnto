@@ -3,15 +3,30 @@ import { FolderTree, Network, Plus, Waypoints } from 'lucide-react';
 import { api, type Saved } from '../api';
 import MappingEditor from '../components/MappingEditor';
 import EntityLinkEditor from '../components/EntityLinkEditor';
+import SemanticAssetEditor from '../components/SemanticAssetEditor';
+import ApplicationBlueprint from '../components/ApplicationBlueprint';
 
 type Domain = {id: string; code: string; title: string; description?: string; lifecycle: string};
 type Ontology = {id: string; domain_id: string; code: string; title: string; description?: string; lifecycle: string; model_id?: string | null; model_revision?: number | null};
 type Mapping = {id: string; ontology_id: string; code: string; title: string; source_code?: string; source_id?: string | null; source_object_name?: string | null};
 type EntityLink = {id: string; ontology_id: string};
-type Asset = {id: string; ontology_id: string};
+type Asset = {id: string; ontology_id: string; asset_kind: 'RULE' | 'METRIC' | 'ACTION'; code: string; title: string; description?: string; lifecycle: string};
 type Catalog = {domains: Domain[]; ontologies: Ontology[]; mappings: Mapping[]; entity_links: EntityLink[]; assets: Asset[]; notice: string};
 
 const empty: Catalog = {domains: [], ontologies: [], mappings: [], entity_links: [], assets: [], notice: ''};
+function list<T>(value: unknown): T[] { return Array.isArray(value) ? value as T[] : []; }
+function normalizeCatalog(value: Partial<Catalog>): Catalog {
+  // A freshly deployed frontend may briefly meet an older backend during a restart.
+  // Missing newer collections must render as empty, not make the whole route unavailable.
+  return {
+    domains: list<Domain>(value.domains),
+    ontologies: list<Ontology>(value.ontologies),
+    mappings: list<Mapping>(value.mappings),
+    entity_links: list<EntityLink>(value.entity_links),
+    assets: list<Asset>(value.assets),
+    notice: typeof value.notice === 'string' ? value.notice : '',
+  };
+}
 function technical(value: string) { return value.trim().replace(/[^A-Za-z0-9_]/g, '_').replace(/^([^A-Za-z_])/, '_$1').slice(0, 80); }
 
 export default function GovernanceWorkspace() {
@@ -19,7 +34,7 @@ export default function GovernanceWorkspace() {
   const [title, setTitle] = useState(''), [code, setCode] = useState(''), [kind, setKind] = useState<'domain'|'ontology'>('domain');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
   const [models, setModels] = useState<Saved[]>([]), [modelChoice, setModelChoice] = useState<Record<string, string>>({});
-  async function refresh() { setCatalog(await api<Catalog>('/governance/catalog')); }
+  async function refresh() { setCatalog(normalizeCatalog(await api<Partial<Catalog>>('/governance/catalog'))); }
   useEffect(() => { void refresh().catch(e => setError(e instanceof Error ? e.message : '无法读取治理目录。')); void api<{items: Saved[]}>('/models').then(r => setModels(r.items)).catch(() => setModels([])); }, []);
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(''); setMessage('');
@@ -48,7 +63,7 @@ export default function GovernanceWorkspace() {
       </form></section>
       <section className="panel"><div className="panel-title"><FolderTree size={16}/><h2>业务域目录</h2><span className="count">{catalog.domains.length}</span></div><div className="governance-list">
         {!catalog.domains.length && <div className="empty compact">尚无业务域。请先创建例如“销售域”。</div>}
-        {catalog.domains.map(d => <article key={d.id} className="governance-card"><strong><Waypoints size={15}/>{d.title}</strong><code>{d.code}</code><span className="tag">{d.lifecycle}</span>{catalog.ontologies.filter(o => o.domain_id === d.id).map(o => <div className="governance-ontology" key={o.id}><strong><Network size={14}/>{o.title}</strong><code>{o.code}</code><span className="tag">{o.lifecycle}</span>{o.model_id ? <><small>已关联 LinkML v{o.model_revision}</small><MappingEditor ontology={o} onSaved={refresh}/><EntityLinkEditor ontologyId={o.id} mappings={catalog.mappings.filter(m => m.ontology_id === o.id)} onSaved={refresh}/></> : <div className="model-link"><select aria-label={`${o.title} 的 LinkML 模型`} value={modelChoice[o.id] ?? ''} onChange={e => setModelChoice({...modelChoice, [o.id]: e.target.value})}><option value="">关联已保存模型…</option>{models.map(m => <option key={m.id} value={m.id}>{m.title} · v{m.revision}</option>)}</select><button disabled={busy || !modelChoice[o.id]} onClick={() => void attach(o)}>关联</button></div>}<small>{catalog.mappings.filter(m => m.ontology_id === o.id).length} 个映射草稿 · {catalog.entity_links.filter(link => link.ontology_id === o.id).length} 个跨源实体对齐草稿 · {catalog.assets.filter(a => a.ontology_id === o.id).length} 个规则/指标/操作草稿</small></div>)}</article>)}
+        {catalog.domains.map(d => <article key={d.id} className="governance-card"><strong><Waypoints size={15}/>{d.title}</strong><code>{d.code}</code><span className="tag">{d.lifecycle}</span>{catalog.ontologies.filter(o => o.domain_id === d.id).map(o => <div className="governance-ontology" key={o.id}><strong><Network size={14}/>{o.title}</strong><code>{o.code}</code><span className="tag">{o.lifecycle}</span>{o.model_id ? <><small>已关联 LinkML v{o.model_revision}</small><MappingEditor ontology={o} onSaved={refresh}/><EntityLinkEditor ontologyId={o.id} mappings={catalog.mappings.filter(m => m.ontology_id === o.id)} onSaved={refresh}/><SemanticAssetEditor ontologyId={o.id} assets={catalog.assets.filter(a => a.ontology_id === o.id)} onSaved={refresh}/><ApplicationBlueprint ontology={o} mappings={catalog.mappings.filter(m => m.ontology_id === o.id).length} entityLinks={catalog.entity_links.filter(link => link.ontology_id === o.id).length} assets={catalog.assets.filter(a => a.ontology_id === o.id).length}/></> : <div className="model-link"><select aria-label={`${o.title} 的 LinkML 模型`} value={modelChoice[o.id] ?? ''} onChange={e => setModelChoice({...modelChoice, [o.id]: e.target.value})}><option value="">关联已保存模型…</option>{models.map(m => <option key={m.id} value={m.id}>{m.title} · v{m.revision}</option>)}</select><button disabled={busy || !modelChoice[o.id]} onClick={() => void attach(o)}>关联</button></div>}<small>{catalog.mappings.filter(m => m.ontology_id === o.id).length} 个映射草稿 · {catalog.entity_links.filter(link => link.ontology_id === o.id).length} 个跨源实体对齐草稿 · {catalog.assets.filter(a => a.ontology_id === o.id).length} 个规则/指标/操作草稿</small></div>)}</article>)}
       </div></section>
     </div>
     <div className="notice subtle">{catalog.notice || '映射、规则、指标、操作目前为声明式草稿资产；不执行用户 SQL/SPARQL，不自动生成或修改 SH DDL。'}</div>

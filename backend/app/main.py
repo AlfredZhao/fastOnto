@@ -18,6 +18,8 @@ from .sources import SOURCES, preview, source_catalog
 from .graph import products as graph_products
 from . import governance
 from . import business_sources
+from . import llm
+from . import analytics
 from .auth import AuthService, require_user, router as auth_router
 from .auth_store import OracleAuthStore
 from urllib.parse import urlsplit
@@ -68,6 +70,24 @@ class SemanticAssetInput(WorkspaceInput):
     definition: dict
 
 
+class AnalyticsQuery(BaseModel):
+    metric_code: str = Field(min_length=1, max_length=80)
+    dimension: Literal["month", "product", "category", "customer", "channel", "promotion"] | None = None
+    year: str | None = Field(default=None, max_length=4)
+    period: Literal["CURRENT_WEEK", "CURRENT_MONTH", "CURRENT_QUARTER", "CURRENT_YEAR", "PREVIOUS_WEEK", "PREVIOUS_MONTH", "PREVIOUS_QUARTER", "PREVIOUS_YEAR"] | None = None
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class AnalyticsQuestion(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+    mode: Literal["governed", "explore"] = "governed"
+
+
+class PresentationInput(BaseModel):
+    order: Literal["LAST_FIRST", "FIRST_LAST"]
+    separator: str = Field(default="", max_length=10)
+
+
 class OntologyModelInput(BaseModel):
     model_id: UUID
     model_revision: int = Field(ge=1)
@@ -89,6 +109,15 @@ class BusinessSourceUpdate(BaseModel):
     dsn: str = Field(min_length=1, max_length=1000)
     username: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=1, max_length=1000)
+
+
+class LLMModelInput(BaseModel):
+    code: str = Field(max_length=80)
+    title: str = Field(max_length=200)
+    base_url: str = Field(max_length=1000)
+    model_name: str = Field(max_length=200)
+    api_key: str = Field(min_length=1, max_length=1000)
+    make_default: bool = True
 
 
 def create_app(settings: Settings | None = None, *, auth_store=None):
@@ -154,6 +183,14 @@ def create_app(settings: Settings | None = None, *, auth_store=None):
     async def source_error(request, exc):
         return JSONResponse({"detail": str(exc), "code": "invalid_business_source"}, status_code=422)
 
+    @app.exception_handler(llm.LLMError)
+    async def llm_error(request, exc):
+        return JSONResponse({"detail": str(exc), "code": "invalid_llm"}, status_code=422)
+
+    @app.exception_handler(analytics.AnalyticsError)
+    async def analytics_error(request, exc):
+        return JSONResponse({"detail": str(exc), "code": "invalid_analytics_request"}, status_code=422)
+
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
@@ -186,7 +223,8 @@ def create_app(settings: Settings | None = None, *, auth_store=None):
 
     @app.post("/api/models/import")
     def import_document(payload: DocumentInput):
-        return inspect_document(payload)
+        result = inspect_document(payload)
+        return llm.analyze_document(db, settings, payload, result)
 
     @app.post("/api/models/draft")
     def draft(payload: DraftInput):
@@ -244,6 +282,29 @@ def create_app(settings: Settings | None = None, *, auth_store=None):
             raise HTTPException(403, "业务数据源凭据仅允许通过 HTTPS 配置；当前临时 HTTP 环境不能提交或修改凭据。")
         if not settings.source_master_key_configured:
             raise HTTPException(503, "本机未配置有效的 FASTONTO_SOURCE_MASTER_KEY，不能保存业务数据源凭据。")
+
+    def require_llm_tls():
+        if not settings.secure_cookie:
+            raise HTTPException(403, "LLM 配置与文档分析仅允许通过 HTTPS。")
+
+    @app.get("/api/llm-models")
+    def llm_models():
+        return {"items": llm.list_models(db), "credential_storage": "encrypted-database", "https_required": True}
+
+    @app.post("/api/llm-models")
+    def create_llm_model(payload: LLMModelInput):
+        require_llm_tls()
+        return llm.create_model(db, settings, payload.code, payload.title, payload.base_url, payload.model_name, payload.api_key, payload.make_default)
+
+    @app.put("/api/llm-models/{llm_id}/default")
+    def set_default_llm_model(llm_id: UUID):
+        require_llm_tls()
+        return llm.set_default(db, str(llm_id))
+
+    @app.post("/api/llm-models/{llm_id}/test")
+    def test_llm_model(llm_id: UUID):
+        require_llm_tls()
+        return llm.test_model(db, settings, str(llm_id))
 
     @app.get("/api/business-sources")
     def business_source_catalog():
@@ -309,6 +370,35 @@ def create_app(settings: Settings | None = None, *, auth_store=None):
     @app.post("/api/governance/assets")
     def governance_asset(payload: SemanticAssetInput):
         return governance.create_semantic_asset(db, str(payload.ontology_id), payload.asset_kind, payload.code, payload.title, payload.description, payload.definition)
+
+    @app.get("/api/analytics/catalog")
+    def analytics_catalog():
+        return {"scenarios": analytics.scenario_catalog(), "metrics": analytics.metric_catalog(),
+                "notice": "仅暴露审阅过的 SH 聚合指标；不接受用户或 LLM 提供的 SQL。"}
+
+    @app.get("/api/analytics/presentations")
+    def analytics_presentations():
+        return analytics.presentations(db)
+
+    @app.put("/api/analytics/presentations/{dimension}")
+    def save_analytics_presentation(dimension: str, payload: PresentationInput):
+        return analytics.save_presentation(db, dimension, payload.model_dump())
+
+    @app.post("/api/analytics/query")
+    def analytics_query(payload: AnalyticsQuery):
+        return analytics.execute(db, payload.metric_code, dimension=payload.dimension, year=payload.year, period=analytics.period_from_selector(payload.period) if payload.period else None, limit=payload.limit, presentations=analytics.presentations(db))
+
+    @app.post("/api/analytics/ask")
+    def analytics_ask(payload: AnalyticsQuestion):
+        resolved = analytics.resolve_with_llm(db, settings, payload.question, mode=payload.mode, classifier=llm.classify_analytics_question)
+        items = analytics.execute_many(db, resolved["metric_codes"], dimension=resolved["dimension"], period=resolved["period"], limit=resolved["limit"], mode=payload.mode, presentations=analytics.presentations(db))
+        result = {**items[0], "question": payload.question, "resolution": resolved["resolution"], "items": items}
+        if resolved["resolution"].startswith("LLM") and len(items) == 1:
+            try: result["narrative"] = llm.summarize_analytics_result(db, settings, items[0])
+            except llm.LLMError: result["narrative"] = analytics.fallback_answers(items)
+        else:
+            result["narrative"] = analytics.fallback_answers(items)
+        return result
 
     @app.get("/api/graph/products")
     def virtual_products():

@@ -10,7 +10,7 @@
 | 模型源码 | FASTONTO.FO_MODELS 与 FO_MODEL_VERSIONS |
 | 模型示例 | 仓库 models/sales.yaml，明确未保存 |
 | 虚拟业务 RDF | 查询时映射 SH；不复制实例三元组 |
-| UI 偏好 | 浏览器只持久化主题；不保存业务数据或模型正文 |
+| UI 偏好 | 浏览器持久化主题，以及按模型校验摘要区分的关系图卡片布局；不保存业务数据或模型正文 |
 
 ## 身份与重复记录
 
@@ -44,6 +44,12 @@
 
 迁移 007 允许同一业务域下的本体映射草稿绑定一个外部数据源及一个经实时数据字典校验的 TABLE/VIEW；这与既有 SH 白名单单表映射并列。`FO_ENTITY_LINK_ASSETS` 可声明两个映射使用的字段具有 `IDENTITY` 实体对齐关系，用于表达例如 CRM 客户与 IAM 用户的统一语义意图。两者都是治理草稿：不创建数据库链路、不复制行、不自动匹配实体，也不执行跨源 join 或联邦查询。
 
+## LLM 文档分析（迁移 008）
+
+`FO_LLM_MODELS` 保存多个兼容 OpenAI Chat Completions 的模型配置。模型地址可使用 HTTP 或 HTTPS，地址和名称可列出；API Key 与外部 Oracle 源凭据共用 `FASTONTO_SOURCE_MASTER_KEY`，以 AES-256-GCM 密文保存；主密钥不返回浏览器或日志。平台内的配置、设为默认、连通性测试和文档分析接口仍要求 HTTPS。
+
+文件继续先在平台内存中进行格式安全检查和有界预处理；非 YAML 文件由用户在页面明确选择默认或指定 LLM 后，才将预处理上下文发送给该服务。LLM 必须只返回受限的候选类/属性 JSON，服务端重新校验数量、字段和 LinkML 草稿生成约束。LLM 输出是待人工审核的候选，不运行其中的规则、SQL、SPARQL、脚本或映射。
+
 ## 运行隔离
 
 - Python 只使用 FASTONTO 凭据；启动时不自动连接或迁移。
@@ -70,3 +76,10 @@ FO_USERS 保存 Argon2id 加盐哈希；FO_AUTH_SESSIONS 保存随机会话令�
 - Oracle 26ai Graph Developer's Guide：SEM_APIS.CREATE_RDFVIEW_GRAPH，r2rml_string / network_owner / network_name。
 - Oracle 26ai SEM_MATCH：options PLUS_RDFT=T 才生成变量对应的 $RDFTERM 列。
 - LinkML SchemaView：类与属性继承解析；只导入包内 linkml:types。
+
+
+## 受控 SH 指标问答（迁移 009/010）
+
+指标运行仅来自服务端审阅过的聚合模板；LLM 只能返回受限的指标、维度、年份和返回条数 JSON，服务端重新校验，绝不执行 LLM 生成 SQL。LLM 可在受限聚合结果上生成中文解读；结果不含凭据、SQL 或明细业务行。
+
+“受限探索”使用同一组固定只读模板，但明确标识为非正式口径，不能替代已发布指标。`FO_ANALYTIC_PRESENTATIONS` 仅存可验证的维度展示元数据；当前客户支持姓/名顺序及绑定的分隔符，绝不保存表达式或 SQL。

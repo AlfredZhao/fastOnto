@@ -121,6 +121,20 @@ check_paths() {
 }
 
 check_worktree_paths() { check_paths worktree < <(git ls-files -z --cached --others --exclude-standard); }
+check_untracked_whitespace() {
+  local path status bad=0
+  while IFS= read -r -d '' path; do
+    # --no-index returns 1 for an ordinary difference; statuses above 1 mean
+    # --check found whitespace/conflict-marker errors (or could not inspect it).
+    if git diff --no-index --check -- /dev/null "$path"; then
+      :
+    else
+      status=$?
+      ((status <= 1)) || bad=1
+    fi
+  done < <(git ls-files --others --exclude-standard -z)
+  ((bad == 0)) || fail '未跟踪的新文件有空白或冲突标记问题；请修复上方列出的位置后重试'
+}
 check_tag() {
   [[ -n "$TAG" ]] || return 0
   if git show-ref --verify --quiet "refs/tags/$TAG"; then
@@ -160,6 +174,7 @@ git --no-pager diff --stat
 git --no-pager diff --cached --stat
 git diff --check >/dev/null 2>&1 || fail '未暂存差异有空白或冲突标记问题；请本机运行 git diff --check 检查'
 git diff --cached --check >/dev/null 2>&1 || fail '暂存差异有空白或冲突标记问题；请本机运行 git diff --cached --check 检查'
+check_untracked_whitespace
 
 if ((DRY_RUN)); then
   ((REMOTE_READY || NO_PUSH)) || printf '提示：尚未配置远端；正式推送前需配置，预演不联网验证。\n'
@@ -173,6 +188,7 @@ if ((!SKIP_BUILD)) && [[ -f frontend/package.json ]]; then
   (cd frontend && npm run build 9>&-) || fail '前端构建失败；尚未由本脚本暂存/提交'
 fi
 check_worktree_paths
+check_untracked_whitespace
 check_tag
 
 [[ "$(git symbolic-ref --quiet --short HEAD || true)" == "$BRANCH" && "$(git rev-parse --verify HEAD 2>/dev/null || true)" == "$HEAD_BEFORE" ]] || fail '校验/构建期间分支或 HEAD 已变化；请检查后重试，不会继续暂存或提交'
@@ -184,7 +200,7 @@ fi
 if [[ -n "$changes" ]]; then
   git add -A -- . || fail '暂存失败；请检查原有暂存区，脚本不会自动 reset'
   check_paths index < <(git ls-files -z --cached)
-  git diff --cached --check >/dev/null 2>&1 || fail '包含新文件的暂存差异检查失败；已暂存但未提交，请手工检查'
+  git diff --cached --check || fail '暂存后的差异检查失败；已暂存但未提交，请根据上方位置修复后重试'
   if ! git diff --cached --quiet; then
     git commit -m "$MESSAGE" 9>&- || fail '提交失败；保留暂存区，不自动撤销用户修改'
   fi

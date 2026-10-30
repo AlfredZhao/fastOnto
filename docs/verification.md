@@ -6,7 +6,7 @@
 
 仅 FASTONTO / ORCLPDB1：
 
-- `FO_SCHEMA_MIGRATIONS`：记录迁移 1、2、3。
+- `FO_SCHEMA_MIGRATIONS`：记录已执行的迁移版本；完整环境应包含 1 至 8。
 - `FO_USERS` / `FO_AUTH_SESSIONS`：应用用户及可撤销会话，默认 admin 已初始化为首次强制改密。
 - `FO_MODELS` / `FO_MODEL_VERSIONS`：平台源码和版本表，未复制业务记录。
 - `FO_NET`：schema-private RDF 网络；Oracle 自动生成内部表、索引、类型、触发器等对象。

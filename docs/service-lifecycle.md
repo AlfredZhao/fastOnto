@@ -4,7 +4,7 @@
 
 原 `start-frontend.sh` 调用 `npm run dev`，监听 `0.0.0.0:8025`；`start-frontend-dev.sh` 调用 `npm run dev:local`，监听 `127.0.0.1:8025`。两者都是 Vite 开发服务，差别只是监听范围，不是生产版与开发版，也不应同时运行。
 
-现在统一到 `start-frontend.sh`：默认保留用户批准的外部 HTTP；`--local` 仅本机。旧 `start-frontend-dev.sh` 只提示弃用并转发至统一入口 `--local`，共享同一 PID 状态与锁。`npm run dev`/`dev:local` 仍可用于开发者有意进行的前台调试，但不受后台管理脚本接管。
+整体生命周期现在默认使用 HTTPS gateway：`start-all.sh` / `restart-all.sh` 编排后端和 gateway，避免与 Vite 争用 8025。显式传 `--local` 时，整体生命周期才使用本机 Vite 前端；旧 `start-frontend-dev.sh` 仍只提示弃用并转发至统一入口 `--local`，共享同一 PID 状态与锁。`npm run dev`/`dev:local` 仍可用于开发者有意进行的前台调试，但不受后台管理脚本接管。
 
 ## 常用命令
 
@@ -15,11 +15,12 @@
 | 后台启动 | start-backend.sh | start-frontend.sh | start-all.sh |
 | 停止 | stop-backend.sh | stop-frontend.sh | stop-all.sh |
 | 重启 | restart-backend.sh | restart-frontend.sh | restart-all.sh |
-| 状态 | status-backend.sh | status-frontend.sh | status.sh |
+| 状态 | status-backend.sh | status-gateway.sh（默认） / status-frontend.sh（`--local`） | status.sh |
 
 ```bash
 bash scripts/start-all.sh
-bash scripts/status.sh
+bash scripts/status.sh          # backend + HTTPS gateway
+bash scripts/status.sh --local  # backend + 本机 Vite
 bash scripts/restart-all.sh
 bash scripts/stop-all.sh
 

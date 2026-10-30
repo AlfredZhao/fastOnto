@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared orchestration. Per-service restart always calls stop script, then start.
+# Shared orchestration. Default whole-stack mode is HTTPS gateway; --local uses Vite on loopback.
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 operation="${1:?需要生命周期操作}"
@@ -11,11 +11,11 @@ while (($#)); do
   case "$1" in
     --help|-h)
       printf '%s\n' "用法：$operation [--timeout 1..300] [--local] [--force]" \
-        '--local：仅启动/重启前端或整体服务；--force：仅停止/重启，优雅停止超时后强制结束。' \
-        '整体启动后端→前端；整体停止前端→后端；重启在 stop 成功后才 start。'
+        '--local：整体服务使用本机 Vite 前端；默认使用 HTTPS gateway。--force：仅停止/重启，优雅停止超时后强制结束。' \
+        '整体启动后端→gateway；整体停止 gateway→后端；重启在 stop 成功后才 start。'
       exit 0 ;;
     --local)
-      case "$operation" in start-all|restart-all|restart-frontend) local_args=(--local);; *) echo '此操作不支持 --local' >&2; exit 2;; esac
+      case "$operation" in start-all|stop-all|restart-all|restart-frontend) local_args=(--local);; *) echo '此操作不支持 --local' >&2; exit 2;; esac
       shift ;;
     --force)
       case "$operation" in stop-all|restart-*) stop_args+=(--force);; *) echo '此操作不支持 --force' >&2; exit 2;; esac
@@ -31,13 +31,15 @@ done
 case "$operation" in
   start-all)
     bash "$SCRIPT_DIR/start-backend.sh" "${start_args[@]}"
-    if ! bash "$SCRIPT_DIR/start-frontend.sh" "${start_args[@]}" "${local_args[@]}"; then
-      echo '前端启动失败；后端状态保留（可能此前已运行）。请运行 status.sh 检查。' >&2
+    if [[ ${#local_args[@]} -gt 0 ]]; then target="frontend"; else target="gateway"; fi
+    if ! bash "$SCRIPT_DIR/start-$target.sh" "${start_args[@]}" "${local_args[@]}"; then
+      echo "$target 启动失败；后端状态保留（可能此前已运行）。请运行 status.sh 检查。" >&2
       exit 1
     fi ;;
   stop-all)
     failed=0
-    bash "$SCRIPT_DIR/stop-frontend.sh" "${stop_args[@]}" || failed=1
+    if [[ ${#local_args[@]} -gt 0 ]]; then target="frontend"; else target="gateway"; fi
+    bash "$SCRIPT_DIR/stop-$target.sh" "${stop_args[@]}" || failed=1
     bash "$SCRIPT_DIR/stop-backend.sh" "${stop_args[@]}" || failed=1
     exit "$failed" ;;
   restart-backend)
@@ -50,7 +52,7 @@ case "$operation" in
     bash "$SCRIPT_DIR/stop-gateway.sh" "${stop_args[@]}"
     bash "$SCRIPT_DIR/start-gateway.sh" "${start_args[@]}" ;;
   restart-all)
-    bash "$SCRIPT_DIR/stop-all.sh" "${stop_args[@]}"
+    bash "$SCRIPT_DIR/stop-all.sh" "${stop_args[@]}" "${local_args[@]}"
     bash "$SCRIPT_DIR/start-all.sh" "${start_args[@]}" "${local_args[@]}" ;;
   *) echo '未知生命周期操作' >&2; exit 2 ;;
 esac

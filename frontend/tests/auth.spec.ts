@@ -58,7 +58,6 @@ for (const width of [1440,375,320]) {
       const seen=await setup(page);
       if (theme==='light') await page.getByRole('button',{name:'切换浅色主题'}).click();
       expect(seen).toHaveLength(0);
-      await expect(page.getByText('当前为 HTTP 测试访问', {exact:false})).toBeVisible();
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBeTruthy();
       if (width===1440 || width===375) await page.screenshot({path:`test-results/login-${width}-${theme}.png`,fullPage:true});
     });

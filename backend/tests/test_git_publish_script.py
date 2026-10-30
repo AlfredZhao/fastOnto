@@ -231,6 +231,16 @@ def test_missing_remote_fails_before_staging(project):
     assert not (project.root / '.git/index').exists()
 
 
+def test_untracked_whitespace_fails_before_staging(project):
+    project.write('new-file.md', 'trailing whitespace  \n')
+    result = project.run('--no-push', '--skip-build', check=False)
+    assert result.returncode != 0
+    assert 'new-file.md' in result.stdout + result.stderr
+    assert '未跟踪的新文件有空白或冲突标记问题' in result.stderr
+    assert not (project.root / '.git/index').exists()
+    assert project.git('rev-parse', '--verify', 'HEAD', check=False).returncode != 0
+
+
 def test_remote_url_credentials_never_echoed(project):
     project.git('remote', 'add', 'origin', 'https://test:SYNTHETIC-TOKEN@github.invalid/team/repo.git')
     result = project.run('--skip-build', check=False)

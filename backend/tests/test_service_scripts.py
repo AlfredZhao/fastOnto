@@ -229,7 +229,7 @@ def orchestration(tmp_path):
                  'start-all.sh', 'stop-all.sh', 'start-frontend-dev.sh']:
         shutil.copyfile(SCRIPTS / name, directory / name)
     calls = directory / 'calls.txt'
-    for name in ['start-backend', 'stop-backend', 'start-frontend', 'stop-frontend']:
+    for name in ['start-backend', 'stop-backend', 'start-frontend', 'stop-frontend', 'start-gateway', 'stop-gateway']:
         (directory / f'{name}.sh').write_text(
             '#!/usr/bin/env bash\nset -eu\n'
             f'printf \'%s\\n\' "{name} $*" >> "$(dirname "$0")/calls.txt"\n'
@@ -245,9 +245,9 @@ def orchestration(tmp_path):
 @pytest.mark.parametrize('name,expected', [
     ('restart-backend.sh', ['stop-backend', 'start-backend']),
     ('restart-frontend.sh', ['stop-frontend', 'start-frontend']),
-    ('restart-all.sh', ['stop-frontend', 'stop-backend', 'start-backend', 'start-frontend']),
-    ('start-all.sh', ['start-backend', 'start-frontend']),
-    ('stop-all.sh', ['stop-frontend', 'stop-backend']),
+    ('restart-all.sh', ['stop-gateway', 'stop-backend', 'start-backend', 'start-gateway']),
+    ('start-all.sh', ['start-backend', 'start-gateway']),
+    ('stop-all.sh', ['stop-gateway', 'stop-backend']),
 ])
 def test_script_order(orchestration, name, expected):
     result, calls = orchestration(name)
@@ -258,9 +258,9 @@ def test_script_order(orchestration, name, expected):
 @pytest.mark.parametrize('name,fail,expected', [
     ('restart-backend.sh', 'stop-backend', ['stop-backend']),
     ('restart-frontend.sh', 'stop-frontend', ['stop-frontend']),
-    ('restart-all.sh', 'stop-frontend', ['stop-frontend', 'stop-backend']),
+    ('restart-all.sh', 'stop-gateway', ['stop-gateway', 'stop-backend']),
     ('start-all.sh', 'start-backend', ['start-backend']),
-    ('start-all.sh', 'start-frontend', ['start-backend', 'start-frontend']),
+    ('start-all.sh', 'start-gateway', ['start-backend', 'start-gateway']),
 ])
 def test_failed_stop_never_restarts_and_start_failure_is_honest(orchestration, name, fail, expected):
     result, calls = orchestration(name, fail=fail)
@@ -293,3 +293,10 @@ def test_shell_syntax_and_conda_only_launcher():
     launcher = (SCRIPTS / '_service.sh').read_text()
     assert 'conda run --no-capture-output -n fastonto python' in launcher
     assert 'pkill' not in (SCRIPTS / 'service_manager.py').read_text()
+
+
+def test_status_defaults_to_gateway_and_local_selects_vite():
+    status = (SCRIPTS / 'status.sh').read_text()
+    assert 'status-gateway.sh' in status
+    assert 'status-frontend.sh' in status
+    assert '[[ "$1" == "--local" ]]' in status
